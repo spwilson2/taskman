@@ -1,0 +1,13 @@
+{
+    "editor.lineNumbers": "relative",
+    "restructuredtext.confPath": "${workspaceFolder}/docs",
+    "[restructuredtext]": {
+        "vim.textwidth": 80,
+        //"editor.wordWrap": "wordWrapColumn",
+        "editor.rulers": [80,120],
+        "editor.quickSuggestions": false,
+        "editor.suggestOnTriggerCharacters": false,
+        "editor.wordBasedSuggestions": false,
+        "editor.parameterHints.enabled": false
+    }
+}
