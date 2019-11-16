@@ -201,55 +201,14 @@ Parameters:
 - id - Comma separated list of tasks which will be waited on, GET response is
   received when all tasks are in a terminal state
 
+------
 
-Node Types
-----------
+/scheduler/state - PATCH - Mark the task as started updating the state to
+    ``<state>``
 
-Command Node
-~~~~~~~~~~~~
-
-This node is a command which will be executed by python. It is formatted as
-follows::
-
-    {
-        metadata: {
-            id: "123",
-            type: "command",
-        },
-        data: {
-            command: "echo",
-            args: ["hello", "world"],
-            result: 0,
-
-            stdout: "hello world",
-            stderr: "",
-            mixedout: "hello world"
-        }
-    }
-
-Shell Command Node
-~~~~~~~~~~~~~~~~~~
-
-This node is similar to the ``Command Node`` except that it will run the command
-in a bash shell.
-
-Format::
-
-    {
-        metadata: {
-            id: "123",
-            type: "shell command",
-            status: "finished"
-        },
-        data: {
-            command: "echo hello world",
-            result: 0,
-
-            stdout: "hello world",
-            stderr: "",
-            mixedout: "hello world"
-        }
-    }
+Parameters:
+- id - Comma separated list of tasks to mark as running
+- state - State to set the task(s) to
 
 
 Taskman's Scheduler
@@ -277,24 +236,72 @@ Here's psuedocode of this process::
             if schedulable(task.state):
                 start_task_thread(task)
 
-
-
-TODO Task completion flow:
-
-NOTE: Each task should get modification access to its parent task and its
-subtasks.
-
 Task Lifetime
 -------------
 
 Tasks are created via the ``/nodes`` api endpoint by the frontend. Tasks
 created via this method will begin in the ``incipient`` state. 
 
-
 Lifetime Flow:
 
 - Created via ``/nodes`` POST call
 - (If) task is a top level task it is added to the scheduler top level list
 - Scheduler starts the task in a separate thread
-- Task finishes..
+- Task finishes, the scheduler updates the 
+- Children tasks are now re-parented to the ``"root"`` node by the scheduler
+  and added to the top-level loop.
 
+Node Types
+----------
+
+The taskman scheduler understands only specifc node types. It handles the logic
+for the executing these various nodes.
+
+Execution Nodes
+~~~~~~~~~~~~~~~
+
+Execution Nodes are nodes which are typically expected to take some non-trival
+amount of time. They range from running a build command to sleeping.
+
+-----
+
+Command Node
+
+This node is a command which will be executed by python in a subprocess. It is
+formatted as follows::
+
+    {
+        metadata: {
+            type: "command",
+        },
+        data: {
+            command: "echo",
+            args: ["hello", "world"],
+            result: 0,
+
+            stdout: "hello world",
+            stderr: "",
+            mixedout: "hello world"
+        }
+    }
+
+-----
+
+Shell Command Node
+
+This node is similar to the ``Command Node`` except that it will run the command
+in a bash shell spawned in a python subprocess. It is formatted as follows::
+
+    {
+        metadata: {
+            type: "shell command",
+        },
+        data: {
+            command: "echo hello world",
+            result: 0,
+
+            stdout: "hello world",
+            stderr: "",
+            mixedout: "hello world"
+        }
+    }
