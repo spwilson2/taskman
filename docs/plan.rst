@@ -1,4 +1,3 @@
-
 Planning Document
 =================
 
@@ -21,115 +20,18 @@ implementation, we will define a strict API here. Before we do so though, we
 will first need a general description of the common state between both
 frontend and backend.
 
+What is Taskman?
+================
+
+Taskman at its core is a task scheduler. It contains a heirarchy of tasks
+to run and runs them in order as soon as there are no impeding tasks further
+up the heirarchy preventing them from running. (This enables certain
+non-traditonal tasks such as system conditions, if/else statemnts to modify or
+conditonally delay execution of tasks.)
 
 
-Taskman Core APIs
-=================
-
-Taskman is probably best understood through the api's it offers and the
-format used when talking about its internal state via HTTP endpoints. Here
-we discuss those.
-
-DAG format
-----------
-
-The DAG will have a standard format when transferred via external APIs.
-As a complete object the DAG may look as follows::
-
-    {
-        "root": "/",
-        "id": "/",
-        "version": "1",
-        "nodes": [
-            {
-                "id": "123",
-                "version": "1"
-                "type": "command",
-                "status": "complete",
-                "data": {
-                    "command": "echo hello world"
-                    "details": {
-                        "result": "0"
-                        "stdout": "hello world\n",
-                        "stderr": "",
-                    }
-                }
-            }
-        ]
-    }
-
-Each node in the DAG must contain:
-
-- "id" str field - a unique ID, provided automatically by the server when
-  nodes are created by a client
-
-- "version" str field - this is the version number for the node. Every time
-  the node's posiiton in the DAG or data in the node changes it will be
-  increased by the server.
-  This design reduces the ability for multiple clients to modify the DAG at
-  the same time, but it prevents the `ABA` problem
-  (https://en.wikipedia.org/wiki/ABA_problem).
-
-- "type" str field - this is the type of the node and will determine other
-  expected fields and their meaning as the backend understands them
-
-- "status" str field - this is the current status of the node in the scheduler
-  queue
-
-Partial DAGS
-~~~~~~~~~~~~
-
-A partial DAG can be formatted by using a different root. Using the DAG from
-above we can create a child node by submitting the following using a POST.
-(See below for the API.) The POST will contain the following::
-
-    {
-        "root": "/123",
-        "version": "1",
-        "nodes": [
-            {
-                "id": "",
-                "version": "0",
-                "type": "command",
-                "data" : {
-                    "command": "echo goodbye world"
-                }
-            }
-        ]
-    }
-
-
-When merged together by the backend, the complete DAG will look as follows::
-
-    {
-        "root": "/",
-        "version": "3"
-        "nodes": [
-            {
-                "id": "123",
-                "version": "1"
-                "type": "command",
-                "data": {
-                    "command": "echo hello world"
-                }
-                "children": {
-                    "id": "124",
-                    "version": "1",
-                    "type": "command",
-                    "data" : {
-                        "command": "echo goodbye world"
-                    }
-                }
-            }
-        ]
-    }
-
-Note that the id number submitted in the request was an empty string and the
-version zero.
-
-Backend
--------
-
+Frontend Requirements
+---------------------
 
 The frontend is going to want to:
 
@@ -144,67 +46,214 @@ The frontend is going to want to:
 - Kill currently running tasks.
 
 
+
 API Endpoints
--------------
+=============
 
-POSTs
-~~~~~
+Taskman is probably best understood through the api's it offers and the
+format used when talking about its internal state via HTTP endpoints. Here
+we discuss those.
 
-/taskman/v1/dag/update
+This documents the v1 api, all endpoints should begin with ``/v1/``.
 
-Send a complete or partial DAG to the server, this will update the existing DAG
-on server side.
+TODO Change the apis to accessors of parts of nodes e.g.
+
+
+Pagination
+----------
+
+Some APIs support pagination of requests. This API uses URI parameters to
+enable pagination.
+
+Requests to pagination enabled APIs can continue as normal. Requsts which will
+receive additional data via paginated requests will receive the following
+additional data in JSON responses::
+
+    pagination: {
+        next: "<value-to-use-in-next-request>",
+        pid: "<value-to-use-in-next-request>"
+    }
+
+- ``next`` - should be passed as an addiitonal query parameter in additonal
+  requests as ``start``
+- ``pid`` - must be passed as a parameter with ``start`` to ensure pagination
+  is still valid
+
+Nodes
+-----
+
+/nodes - GET - Get high level information about many nodes at once
 
 Parameters:
+- (o) type - Type of nodes ids to return
+- (o) state - Status of node ids to return, if not supplied nodes of all
+  state types will be returned
+- (o) metadata - Comma separated list of metadata to provide with the nodes,
+  (in addition to ID) if not supplied, all metadata will be returned
+- (o) new=<id> - Return only nodes newer than the given id, if none are newer
+  the request will wait until the client times out or one or more nodes are
+  added
 
-- None
-- Supplied data will be interpreted as the DAG
+Example response to ``GET /nodes?metadata=type,parent``::
+
+    [
+        {
+            id: "22",
+            type: "command",
+            parent: "root",
+        },
+        {
+            id: "23",
+            type: "command",
+            parent: "22",
+        }
+    ]
+
+Pagination is supported for this interface.
 
 -----
 
-/taskman/v1/scheduler/killTask
+/nodes - POST - Add a new node with given metadata & data
 
-Kill a given task.
+Node should be formatted as follows (multiple can be submitted at the same time)::
 
-Returns:
-
-- Returns nothing, the POST request will return when the process terminates.
-
-Parameters:
-
-- id - the id of the node which task should be killed
-- Additional parameters will be passed to the task's kill handler
-
-GETs
-~~~~
-
-/taskman/v1/dag/get
-
-Returns:
-
-- Returns a json string with the DAG
-
-Parameters:
-
-- root - id of the root to return the dag from (returns full, if not supplied)
-- type - a list of the type of nodes to display, can be supplied multiple times
-- status - a list of status values to filter nodes on
+    [
+        {
+            metadata: {
+                type: "<any-supported-type>",
+                parent: "<root | an existing node ID>"
+                // An ID will be automatically generated by the server
+                // The task will automatically be place in the incipient state
+            }
+            data: {
+            }
+        } //, Optional additional nodes
+    ]
 
 -----
 
-d
+/nodes/<id>/data - GET - Returns a list of data keys
+
+Response format::
+    {
+        keys: [
+            "a", "list", "of", "keys" 
+        ]
+    }
+
+Pagination is supported for this interface.
+
+-----
+
+/nodes/<id>/data/<key> - GET - Returns data for the given key
+
+Pagination is supported for this interface.
+
+Response format::
+    
+    {
+        key: "<key>",
+        data: "<data>",
+        pagination: {
+            next: "<value-to-use-in-next-request>",
+            pid: "<value-to-use-in-next-request>"
+        }
+    }
+
+-----
+
+/nodes/<id>/data/<key> - PUT - Replace data values
+
+Expected request format::
+
+    {
+        value: "<data>",
+    }
+
+Pagination is supported for this interface, however it is a bit special.
+The ``start`` parameter is optional. If it is provided but without a value then
+PUT will only replace the current value if the value for ``<key>`` is unset.
+The ``pagid`` value and ``start`` value to replace the first slot of data will
+be returned in the response. Otherwise, pagination behaves as you would expect.
+
+-----
+
+
+Scheduler
+---------
+
+Scheduler APIs are sort of non-RESTful interfaces to simplify application
+development.
+
+-----
+
+/scheduler/kill - PUT - Start the kill process for the given processes
+
+Parameters:
+- id - Comma separated list of tasks to inform the scheduler to begin killing
+
+-----
+
+/scheduler/wait - GET - Wait for <id>'s node to finish execution, returns the
+    node's state on completion
+
+Parameters:
+- id - Comma separated list of tasks which will be waited on, GET response is
+  received when all tasks are in a terminal state
+
+
+Node Types
+----------
+
+Command Node
+~~~~~~~~~~~~
+
+This node is a command which will be executed by python. It is formatted as
+follows::
+
+    {
+        metadata: {
+            id: "123",
+            type: "command",
+        },
+        data: {
+            command: "echo",
+            args: ["hello", "world"],
+            result: 0,
+
+            stdout: "hello world",
+            stderr: "",
+            mixedout: "hello world"
+        }
+    }
+
+Shell Command Node
+~~~~~~~~~~~~~~~~~~
+
+This node is similar to the ``Command Node`` except that it will run the command
+in a bash shell.
+
+Format::
+
+    {
+        metadata: {
+            id: "123",
+            type: "shell command",
+            status: "finished"
+        },
+        data: {
+            command: "echo hello world",
+            result: 0,
+
+            stdout: "hello world",
+            stderr: "",
+            mixedout: "hello world"
+        }
+    }
 
 
 Taskman's Scheduler
 ===================
-
-
-Taskman at its core is just a task scheduler. It contains a heirarchy of tasks
-to run and runs them in order as soon as there are no impeding tasks further
-up the heirarchy preventing them from running. (This enables certain
-non-traditonal tasks such as system conditions, if/else statemnts to modify or
-conditonally delay execution of tasks.)
-
 
 The task scheduler maintains a list of top level tasks which have not yet
 completed. The scheduler spins in a loop waiting for any task in this list to
@@ -219,15 +268,33 @@ Here's psuedocode of this process::
 
     while True:
         for task in unscheduled_list:
-            if task.status == 'complete':
+            if task.state == "complete":
                 cleanup_task_thread(task)
                 # psuedocode, iteration modification danger
                 unscheduled_list.remove(task)
                 unscheduled_list.extend(task.subtasks)
 
-            if schedulable(task.status):
+            if schedulable(task.state):
                 start_task_thread(task)
 
 
+
+TODO Task completion flow:
+
 NOTE: Each task should get modification access to its parent task and its
 subtasks.
+
+Task Lifetime
+-------------
+
+Tasks are created via the ``/nodes`` api endpoint by the frontend. Tasks
+created via this method will begin in the ``incipient`` state. 
+
+
+Lifetime Flow:
+
+- Created via ``/nodes`` POST call
+- (If) task is a top level task it is added to the scheduler top level list
+- Scheduler starts the task in a separate thread
+- Task finishes..
+
