@@ -24,6 +24,12 @@ class MissingMetadataAttributeError extends Error {
 }
 class MissingMetadataError extends Error {}
 
+function assert(condition: boolean, message?: string) {
+    if (!condition) {
+        throw message || "Assertion failed";
+    }
+}
+
 /**
  * This class contains required metadata for NodeTemplate objects.
  * (Node objects can contain extra metadata, this defines a subset.)
@@ -60,7 +66,7 @@ class NodeTemplateMetadata {
  */
 class NodeTemplate {
     metadata: NodeTemplateMetadata;
-    data?: object;
+    data: object;
 
     public static checkedInterpretObject(o : object) {
         if (!('metadata' in o)) {
@@ -116,7 +122,7 @@ class NodeMetadata {
 
 class Node {
     metadata: NodeMetadata;
-    data?: object;
+    data: object;
 
     public static checkedInterpretObject(o : object) {
         if (!('metadata' in o)) {
@@ -137,10 +143,18 @@ class Node {
 }
 
 class NodeCounter {
-    private curIdx: number;
+    private static INITIAL = 0;
+    private curIdx: number = NodeCounter.INITIAL;
 
     constructor() {
-        this.curIdx = 0;
+    }
+
+    /** @returns: The highest number output so far or -1. */
+    public highest() {
+        return this.curIdx - 1;
+    }
+    public wasGenerated(val: number) {
+        return val <= this.highest() && val >= NodeCounter.INITIAL;
     }
 
     public next() {
@@ -195,7 +209,7 @@ class NodesController {
         response.send('Hello World');
     }
 
-    private filterNodes(list: Node[], callback: (node: Node) => boolean) {
+    private filterNodes<T>(list: T[], callback: (node: T) => boolean) {
         // I don't know how javacript stores Array's, if they're linked lists this
         // method of deletion is certainly faster, if not it might just be faster to
         // rebuild the Array with normal filter.
@@ -243,24 +257,22 @@ class NodesController {
             return;
 
         // Create a response object with just the node's metadata
-        let nodes : Node[] = [];
+        let nodes : NodeMetadata[] = [];
         for (const n of this.nodes) {
-            nodes.push({
-                "metadata": NodeMetadata.fromObject(n.metadata),
-            })
+            nodes.push(NodeMetadata.fromObject(n.metadata))
         }
 
         if ("type" in request.query) {
             // Split the type paramaeter by commas
             let types =  new Set(request.query.split(','));
-            this.filterNodes(nodes, (node: Node) => {
+            this.filterNodes<NodeMetadata>(nodes, (node: NodeMetadata) => {
                 return types.size == 0 || node["type"] in types;
             })
         }
         if ("state" in request.query) {
             // Split the type paramaeter by commas
             let states =  new Set(request.query.split(','));
-            this.filterNodes(nodes, (node: Node) => {
+            this.filterNodes(nodes, (node: NodeMetadata) => {
                 return states.size == 0 || node["state"] in states;
             })
         }
@@ -276,8 +288,8 @@ class NodesController {
             }
 
             // Look through each node, only return nodes whose id is > new
-            this.filterNodes(nodes, (n: Node) => {
-                return Number(n.metadata["id"]) > limit;
+            this.filterNodes(nodes, (n: NodeMetadata) => {
+                return Number(n["id"]) > limit;
             })
         }
 
@@ -287,12 +299,11 @@ class NodesController {
             // For each node, filter their metadata attributes
             for (let n of nodes) {
                 let new_map = {};
-                for (let [k, v] of Object.entries(n.metadata)) {
-                    if (k in metadata) {
-                        new_map[k] = v;
+                for (let [k, v] of Object.keys(n)) {
+                    if (!(k in metadata)) {
+                        delete n[k];
                     }
                 }
-                n.metadata = NodeMetadata.interpretObject(new_map);
             }
         }
 
@@ -337,7 +348,11 @@ class NodesController {
         }
         for (const n of request.body) {
             try {
-                 // Ignore return val, just check exception
+                if (!('data' in n)) {
+                    n.data = {}
+                }
+
+                // Ignore return val, just check exception
                 NodeTemplate.checkedInterpretObject(n);
             } catch (e) {
                 response.status(httpStatus.BAD_REQUEST).send(e.message);
@@ -366,27 +381,39 @@ class NodesController {
      *
      */
     private handleGetIdData(req: express.Request, res: express.Response) {
-        res.status(503).send("This endpoint hasn't been implemented yet.");
+        if (!this.verifyParameters(new Set(), req, res))
+            return;
+
+        let idx = Number(req.params.id);
+        if (isNaN(idx) || !(this.idGenerator.wasGenerated(idx))) {
+            res.status(httpStatus.NOT_FOUND).send(`ID "${req.params.id}" does not exist`);
+            return;
+        }
+
+        const node = this.nodes[idx];
+        assert(Number(node.metadata.id) == idx);
+        res.send(Object.keys(node.data));
     }
+
     private handleGetIdDataKey(req: express.Request, res: express.Response) {
         //TODO
-        res.status(503).send("This endpoint hasn't been implemented yet.");
+        res.status(httpStatus.NOT_IMPLEMENTED).send("This endpoint hasn't been implemented yet.");
     }
     private handlePutIdDataKey(req: express.Request, res: express.Response) {
         //TODO
-        res.status(503).send("This endpoint hasn't been implemented yet.");
+        res.status(httpStatus.NOT_IMPLEMENTED).send("This endpoint hasn't been implemented yet.");
     }
     private handleGetSchedulerWait(req: express.Request, res: express.Response) {
         //TODO
-        res.status(503).send("This endpoint hasn't been implemented yet.");
+        res.status(httpStatus.NOT_IMPLEMENTED).send("This endpoint hasn't been implemented yet.");
     }
     private handlePutSchedulerKill(req: express.Request, res: express.Response) {
         //TODO
-        res.status(503).send("This endpoint hasn't been implemented yet.");
+        res.status(httpStatus.NOT_IMPLEMENTED).send("This endpoint hasn't been implemented yet.");
     }
     private handlePatchSchedulerState(req: express.Request, res: express.Response) {
         //TODO
-        res.status(503).send("This endpoint hasn't been implemented yet.");
+        res.status(httpStatus.NOT_IMPLEMENTED).send("This endpoint hasn't been implemented yet.");
     }
 }
 
