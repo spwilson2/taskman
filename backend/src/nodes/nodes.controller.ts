@@ -1,4 +1,5 @@
 import * as express from 'express';
+import * as httpStatus from 'http-status-codes';
 import Node from './node.interface';
 
 interface NodeRequestMetadata {
@@ -68,9 +69,9 @@ class NodesController {
 
         // Check for unexpected parameters and log them.
         for (const k of Object.keys(request.query)) {
-            if (!(k in supported_args)) {
-                console.log("Router '%s' - Recieved packet with unsupported parameter '%s'", this.path, k);
-                // TODO - Return invalid request.
+            if (!supported_args.has(k)) {
+                console.log(`Router '${this.path}' - Recieved packet with unsupported parameter ${k}`);
+                response.status(httpStatus.BAD_REQUEST).send(`Unsupported parameter "${k}"`);
                 return;
             }
         }
@@ -99,10 +100,11 @@ class NodesController {
 
         // Filter out nodes by ID's (newer than)
         if ("new" in request.query) {
-            let limit : number = Number(request.query["new"]);
+            let req = request.query["new"];
+            let limit : number = Number(req);
             if (isNaN(limit)) {
                 console.log("Router '%s' - Recieved packet with new parameter '%s' this is NaN.", this.path, limit);
-                // TODO - Return invalid request.
+                response.status(httpStatus.BAD_REQUEST).send(`Requested new param "${req}" is NaN.`);
                 return;
             }
 
