@@ -210,6 +210,18 @@ class NodesController {
         }
     }
 
+
+    private verifyParameters(allowed: Set<string>, req: express.Request, res: express.Response) {
+        // Check for unexpected parameters and log them.
+        for (const k of Object.keys(req.query)) {
+            if (!allowed.has(k)) {
+                console.log(`Router '${this.path}' - Recieved packet with unsupported parameter ${k}`);
+                res.status(httpStatus.BAD_REQUEST).send(`Unsupported parameter "${k}"`);
+                return false;
+            }
+        }
+        return true;
+    }
     /**
      *
      * /nodes - GET - Get high level information about many nodes at once
@@ -227,15 +239,9 @@ class NodesController {
      */
     private handleGetNodes(request: express.Request, response: express.Response) {
         const supported_args = new Set(["type", "state", "metadata", "new"]);
+        if (!this.verifyParameters(supported_args, request, response))
+            return;
 
-        // Check for unexpected parameters and log them.
-        for (const k of Object.keys(request.query)) {
-            if (!supported_args.has(k)) {
-                console.log(`Router '${this.path}' - Recieved packet with unsupported parameter ${k}`);
-                response.status(httpStatus.BAD_REQUEST).send(`Unsupported parameter "${k}"`);
-                return;
-            }
-        }
         // Create a response object with just the node's metadata
         let nodes : Node[] = [];
         for (const n of this.nodes) {
@@ -322,7 +328,9 @@ class NodesController {
      *     ]
      * */
     private handlePostNodes(request: express.Request, response: express.Response) {
-        console.log("Adding new node.")
+        if (!this.verifyParameters(new Set(), request, response))
+            return;
+
         if (!(request.body instanceof Array)) {
             response.status(httpStatus.BAD_REQUEST).send("POST data did not contain Array as top-level");
             return;
@@ -343,8 +351,21 @@ class NodesController {
         response.status(httpStatus.OK).send();
     }
 
+    /**
+     *
+     * /nodes/<id>/data - GET - Returns a list of data keys
+     *
+     * Response format::
+     *     {
+     *         keys: [
+     *             "a", "list", "of", "keys" 
+     *         ]
+     *     }
+     *
+     * Pagination is supported for this interface.
+     *
+     */
     private handleGetIdData(req: express.Request, res: express.Response) {
-        //TODO
         res.status(503).send("This endpoint hasn't been implemented yet.");
     }
     private handleGetIdDataKey(req: express.Request, res: express.Response) {
