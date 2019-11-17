@@ -170,6 +170,25 @@ class NodesController {
 
         this.handlePostNodes = this.handlePostNodes.bind(this);
         this.router.post(this.path, this.handlePostNodes);
+
+        // TODO These endpoints should be moved to a separate file?
+        this.handleGetIdDataKey = this.handleGetIdDataKey.bind(this);
+        this.router.get(this.path + '/:id/data/:key', this.handleGetIdDataKey);
+
+        this.handlePutIdDataKey = this.handlePutIdDataKey.bind(this);
+        this.router.put(this.path + '/:id/data/:key', this.handlePutIdDataKey);
+
+        this.handleGetIdData = this.handleGetIdData.bind(this);
+        this.router.get(this.path + '/:id/data', this.handleGetIdData);
+
+        this.handlePutSchedulerKill = this.handlePutSchedulerKill .bind(this);
+        this.router.get('/scheduler/kill', this.handlePutSchedulerKill);
+
+        this.handleGetSchedulerWait = this.handleGetSchedulerWait .bind(this);
+        this.router.get('/scheduler/wait', this.handleGetSchedulerWait);
+
+        this.handlePatchSchedulerState = this.handlePatchSchedulerState .bind(this);
+        this.router.get('/scheduler/state', this.handlePatchSchedulerState);
     }
 
     other = (request: express.Request, response: express.Response) => {
@@ -322,6 +341,31 @@ class NodesController {
             this.addTemplatedNode(n);
         }
         response.status(httpStatus.OK).send();
+    }
+
+    private handleGetIdData(req: express.Request, res: express.Response) {
+        //TODO
+        res.status(503).send("This endpoint hasn't been implemented yet.");
+    }
+    private handleGetIdDataKey(req: express.Request, res: express.Response) {
+        //TODO
+        res.status(503).send("This endpoint hasn't been implemented yet.");
+    }
+    private handlePutIdDataKey(req: express.Request, res: express.Response) {
+        //TODO
+        res.status(503).send("This endpoint hasn't been implemented yet.");
+    }
+    private handleGetSchedulerWait(req: express.Request, res: express.Response) {
+        //TODO
+        res.status(503).send("This endpoint hasn't been implemented yet.");
+    }
+    private handlePutSchedulerKill(req: express.Request, res: express.Response) {
+        //TODO
+        res.status(503).send("This endpoint hasn't been implemented yet.");
+    }
+    private handlePatchSchedulerState(req: express.Request, res: express.Response) {
+        //TODO
+        res.status(503).send("This endpoint hasn't been implemented yet.");
     }
 }
 
