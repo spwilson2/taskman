@@ -1,3 +1,4 @@
+import * as assert from 'assert';
 import * as express from 'express';
 import * as httpStatus from 'http-status-codes';
 //import Node from './node.interface';
@@ -23,12 +24,6 @@ class MissingMetadataAttributeError extends Error {
     }
 }
 class MissingMetadataError extends Error {}
-
-function assert(condition: boolean, message?: string) {
-    if (!condition) {
-        throw message || "Assertion failed";
-    }
-}
 
 /**
  * This class contains required metadata for NodeTemplate objects.
@@ -363,7 +358,7 @@ class NodesController {
         for (const n of node_requests) {
             this.addTemplatedNode(n);
         }
-        response.status(httpStatus.OK).send();
+        response.send();
     }
 
     /**
@@ -391,18 +386,91 @@ class NodesController {
         }
 
         const node = this.nodes[idx];
-        assert(Number(node.metadata.id) == idx);
+        assert.ok(Number(node.metadata.id) == idx);
         res.send(Object.keys(node.data));
     }
 
+    /**
+     *
+     * /nodes/<id>/data/<key> - GET - Returns data for the given key
+     *
+     * Pagination is supported for this interface.
+     *
+     * Response format::
+     *     
+     *     {
+     *         key: "<key>",
+     *         data: "<data>",
+     *         pagination: {
+     *             next: "<value-to-use-in-next-request>",
+     *             pid: "<value-to-use-in-next-request>"
+     *         }
+     *     }
+     * */
     private handleGetIdDataKey(req: express.Request, res: express.Response) {
-        //TODO
-        res.status(httpStatus.NOT_IMPLEMENTED).send("This endpoint hasn't been implemented yet.");
+        if (!this.verifyParameters(new Set(), req, res))
+            return;
+
+        let idx = Number(req.params.id);
+        if (isNaN(idx) || !(this.idGenerator.wasGenerated(idx))) {
+            res.status(httpStatus.NOT_FOUND).send(`ID "${req.params.id}" does not exist`);
+            return;
+        }
+
+        const node = this.nodes[idx];
+        assert.ok(Number(node.metadata.id) == idx);
+
+        if (!(req.params.key in node.data)) {
+            res.status(httpStatus.NOT_FOUND).send(`Key "${req.params.key}" does not exist`);
+            return;
+        }
+
+        res.send({
+            "key": req.params.key,
+            "data": node.data[req.params.key],
+            // TODO Pagination
+        });
     }
+
+    /**
+     *
+     * /nodes/<id>/data/<key> - PUT - Replace data values
+     *
+     * Expected request format::
+     *
+     *  {
+     *      value: "<data>",
+     *  }
+     *
+     * Pagination is supported for this interface, however it is a bit special.
+     * The ``start`` parameter is optional. If it is provided but without
+     * a value then PUT will only replace the current value if the value for
+     * ``<key>`` is unset.  The ``pagid`` value and ``start`` value to replace
+     * the first slot of data will be returned in the response. Otherwise,
+     * pagination behaves as you would expect.
+     * */
     private handlePutIdDataKey(req: express.Request, res: express.Response) {
-        //TODO
-        res.status(httpStatus.NOT_IMPLEMENTED).send("This endpoint hasn't been implemented yet.");
+        if (!this.verifyParameters(new Set(), req, res))
+            return;
+
+        let idx = Number(req.params.id);
+        if (isNaN(idx) || !(this.idGenerator.wasGenerated(idx))) {
+            res.status(httpStatus.NOT_FOUND).send(`ID "${req.params.id}" does not exist`);
+            return;
+        }
+
+        let node = this.nodes[idx];
+        assert.ok(Number(node.metadata.id) == idx);
+
+        if (!('value' in req.body) || (req.body.size > 1)) {
+            res.status(httpStatus.BAD_REQUEST).send(`Data formatted incorrectly.`);
+            return;
+        }
+        node.data[req.params.key] = req.body['value'];
+        res.send();
+        //TODO Pagination
     }
+
     private handleGetSchedulerWait(req: express.Request, res: express.Response) {
         //TODO
         res.status(httpStatus.NOT_IMPLEMENTED).send("This endpoint hasn't been implemented yet.");
