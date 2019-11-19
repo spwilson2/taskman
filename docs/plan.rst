@@ -208,7 +208,7 @@ Parameters:
     ``<state>``
 
 Parameters:
-- id - Comma separated list of tasks to mark as running
+- id - Comma separated list of tasks to mark with given state
 - state - State to set the task(s) to
 
 

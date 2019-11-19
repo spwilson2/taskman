@@ -208,7 +208,7 @@ class NodesController {
         this.router.get('/scheduler/wait', this.handleGetSchedulerWait);
 
         this.handlePatchSchedulerState = this.handlePatchSchedulerState.bind(this);
-        this.router.get('/scheduler/state', this.handlePatchSchedulerState);
+        this.router.patch('/scheduler/state', this.handlePatchSchedulerState);
     }
 
     other = (request: express.Request, response: express.Response) => {
@@ -515,6 +515,14 @@ class NodesController {
     private async handleGetSchedulerWait(req: express.Request, res: express.Response) {
         if (!this.verifyParameters(new Set(["id", "state"]), req, res))
             return;
+        if (!("id" in req.query)) {
+            res.status(httpStatus.BAD_REQUEST).send("Missing id query parameter.");
+            return;
+        }
+        if (!("state" in req.query)) {
+            res.status(httpStatus.BAD_REQUEST).send("Missing state query parameter.");
+            return;
+        }
 
         let node_ids : any[] = req.query.id.split(',');
         let state = req.query["state"];
@@ -540,12 +548,16 @@ class NodesController {
                 await this.waitNodeUpdate(n, state);
         }
 
-        res.send({'ids': node_ids, "state": req.query["state"]});
+        res.send({'ids': node_ids.map(String), "state": req.query["state"]});
     }
 
     private handlePutSchedulerKill(req: express.Request, res: express.Response) {
         if (!this.verifyParameters(new Set(["id"]), req, res))
             return;
+        if (!("id" in req.query)) {
+            res.status(httpStatus.BAD_REQUEST).send("Missing id query parameter.");
+            return;
+        }
 
         let node_ids = req.query.id.split(',');
         // Verify all node_ids are numbers
@@ -565,9 +577,47 @@ class NodesController {
 
         res.send();
     }
+
+    /**
+     *  /scheduler/state - PATCH - Mark the task as started updating the state to
+     *  ``<state>``
+     *
+     *  Parameters:
+     *  - id - Comma separated list of tasks to mark with given state
+     *  - state - State to set the task(s) to
+     */
     private handlePatchSchedulerState(req: express.Request, res: express.Response) {
-        //TODO
-        res.status(httpStatus.NOT_IMPLEMENTED).send("This endpoint hasn't been implemented yet.");
+        if (!this.verifyParameters(new Set(["id", "state"]), req, res))
+            return;
+        if (!("state" in req.query)) {
+            res.status(httpStatus.BAD_REQUEST).send("Missing state query parameter.");
+            return;
+        }
+        let state = req.query.state;
+        if (!Object.values(NodeState).includes(state)) {
+                res.status(httpStatus.BAD_REQUEST).send(`Provided state "${state}" is not valid.`);
+            return;
+        }
+        if (!("id" in req.query)) {
+            res.status(httpStatus.BAD_REQUEST).send("Missing id query parameter.");
+            return;
+        }
+        let node_ids = req.query.id.split(',');
+        // Verify all node_ids are numbers
+        for (const n of node_ids) {
+            let id = Number(n);
+            if (isNaN(id) || !this.idGenerator.wasGenerated(id)) {
+                res.status(httpStatus.BAD_REQUEST).send(`Provided id "${n}" is not valid.`);
+                return;
+            }
+        }
+        node_ids = node_ids.map(Number);
+        for (const id of node_ids) {
+            let node = this.getNode(id);
+            this.nodeSetState(node, state);
+        }
+
+        res.send({"ids": node_ids.map(String), "state": state});
     }
 }
 
