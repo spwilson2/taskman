@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as express from 'express';
 import * as httpStatus from 'http-status-codes';
+import { once, EventEmitter } from "events";
 //import Node from './node.interface';
 //
 
@@ -82,6 +83,7 @@ class NodeMetadata {
     public id : string;
     public type: string;
     public parent: string;
+    public state: NodeState;
 
     public static fromObject(o : object) {
         let us = NodeMetadata.fromArgs(o['id'], o['type'], o['parent']);
@@ -157,6 +159,10 @@ class NodeCounter {
     }
 }
 
+enum NodeState {
+    Killing = "killing",
+}
+
 class NodesController {
     public path = '/nodes';
     public router = express.Router();
@@ -190,13 +196,18 @@ class NodesController {
         this.handleGetIdData = this.handleGetIdData.bind(this);
         this.router.get(this.path + '/:id/data', this.handleGetIdData);
 
-        this.handlePutSchedulerKill = this.handlePutSchedulerKill .bind(this);
-        this.router.get('/scheduler/kill', this.handlePutSchedulerKill);
 
-        this.handleGetSchedulerWait = this.handleGetSchedulerWait .bind(this);
+
+        // TODO Split out into separate controller
+        this.nodeStateEmitter = new EventEmitter();
+
+        this.handlePutSchedulerKill = this.handlePutSchedulerKill.bind(this);
+        this.router.put('/scheduler/kill', this.handlePutSchedulerKill);
+
+        this.handleGetSchedulerWait = this.handleGetSchedulerWait.bind(this);
         this.router.get('/scheduler/wait', this.handleGetSchedulerWait);
 
-        this.handlePatchSchedulerState = this.handlePatchSchedulerState .bind(this);
+        this.handlePatchSchedulerState = this.handlePatchSchedulerState.bind(this);
         this.router.get('/scheduler/state', this.handlePatchSchedulerState);
     }
 
@@ -217,6 +228,15 @@ class NodesController {
         for (let i = list.length - 1; i >= 0; i--) {
             list.splice(i, 0);
         }
+    }
+
+    private getNode(id: number) {
+        for (const n of this.nodes) {
+            if (Number(n.metadata.id) === id) {
+                return n;
+            }
+        }
+        return null;
     }
 
 
@@ -310,8 +330,6 @@ class NodesController {
         let new_id = this.idGenerator.next();
         node_request['metadata']['id'] = new_id;
         this.nodes.push(Node.interpretObject(node_request));
-
-        console.log("Adding new node.")
     }
 
     /**
@@ -471,13 +489,81 @@ class NodesController {
         //TODO Pagination
     }
 
-    private handleGetSchedulerWait(req: express.Request, res: express.Response) {
-        //TODO
-        res.status(httpStatus.NOT_IMPLEMENTED).send("This endpoint hasn't been implemented yet.");
+
+    private nodeStateEmitter : EventEmitter;
+
+    private nodeStateEmitterEvent(id: number, state: NodeState) {
+        return `${id}:${state}`;
     }
+
+    private nodeSetState(node : Node, state: NodeState) {
+        // Set the node's state
+        node.metadata.state = state;
+        const key = this.nodeStateEmitterEvent(Number(node.metadata.id), state);
+
+        // Wake up all callbacks waiting for the node state to change
+        this.nodeStateEmitter.emit(key);
+    }
+
+    private async waitNodeUpdate(id: number, state: NodeState) {
+        const key = this.nodeStateEmitterEvent(id, state);
+        await once(this.nodeStateEmitter, key);
+    }
+
+    // Scheduler functions should use an accessor to get node data/information.
+    // Callbacks should be able to then be informed when state changes occur.
+    private async handleGetSchedulerWait(req: express.Request, res: express.Response) {
+        if (!this.verifyParameters(new Set(["id", "state"]), req, res))
+            return;
+
+        let node_ids : any[] = req.query.id.split(',');
+        let state = req.query["state"];
+        // Verify all node_ids are numbers
+        for (const n of node_ids) {
+            let id = Number(n);
+            if (isNaN(id) || !this.idGenerator.wasGenerated(id)) {
+                res.status(httpStatus.BAD_REQUEST).send(`Provided id "${n}" is not valid.`);
+                return;
+            }
+        }
+        node_ids = node_ids.map(Number);
+
+        if (!Object.values(NodeState).includes(state)) {
+                res.status(httpStatus.BAD_REQUEST).send(`Provided state "${state}" is not valid.`);
+            return;
+        }
+
+        // Get the node with given id
+        for (const n of node_ids) {
+            let node = this.getNode(n);
+            if (node.metadata.state !== state)
+                await this.waitNodeUpdate(n, state);
+        }
+
+        res.send({'ids': node_ids, "state": req.query["state"]});
+    }
+
     private handlePutSchedulerKill(req: express.Request, res: express.Response) {
-        //TODO
-        res.status(httpStatus.NOT_IMPLEMENTED).send("This endpoint hasn't been implemented yet.");
+        if (!this.verifyParameters(new Set(["id"]), req, res))
+            return;
+
+        let node_ids = req.query.id.split(',');
+        // Verify all node_ids are numbers
+        for (const n of node_ids) {
+            let id = Number(n);
+            if (isNaN(id) || !this.idGenerator.wasGenerated(id)) {
+                res.status(httpStatus.BAD_REQUEST).send(`Provided id "${n}" is not valid.`);
+                return;
+            }
+        }
+        node_ids = node_ids.map(Number);
+
+        for (const n of node_ids) {
+            let node = this.getNode(n);
+            this.nodeSetState(node, NodeState.Killing);
+        }
+
+        res.send();
     }
     private handlePatchSchedulerState(req: express.Request, res: express.Response) {
         //TODO

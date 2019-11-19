@@ -200,6 +200,7 @@ Parameters:
 Parameters:
 - id - Comma separated list of tasks which will be waited on, GET response is
   received when all tasks are in a terminal state
+- (o) state - If a state is given, wait for the change to that specific state
 
 ------
 
